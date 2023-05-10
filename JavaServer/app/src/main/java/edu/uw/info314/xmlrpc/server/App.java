@@ -6,18 +6,24 @@ import java.util.logging.*;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.stream.XMLReporter;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
 
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import static spark.Spark.*;
+import spark.Filter;
+
+import java.io.StringWriter;
+import java.io.PrintWriter;
 
 class Call {
     public String name;
-    public List<Object> args = new ArrayList<Object>();
+    public List<Integer> args = new ArrayList<Integer>();
 }
 
 public class App {
@@ -27,21 +33,17 @@ public class App {
     LOG.info("Starting up on port 8080");
     port(8080);
 
-    // ***FIX***
-    // How to I test if the path is wrong?
+    Filter checkPath = (request, response) -> {
+      if (!request.pathInfo().equals("/RPC")) {
+        halt(404, "Not Found");
+      }
+    };
 
-    // path("/", () -> {
-    //   before((request, response) -> {
-    //     if (!request.contextPath().equals("/RPC")) {
-    //       halt(404, "Path Not Found");
-    //     }
-    //   });
-    // });
+    before(checkPath);
 
     post("/RPC", (request, response) -> {
-      Call call = extractXMLRPCCall(response.body());
-
       try {
+        Call call = extractXMLRPCCall(request.body());
         int result = 0;
         if (call.name.equals("add")) {
           result = handleAdd(call.args);
@@ -61,26 +63,34 @@ public class App {
 
         String xmlResponse = buildXML(result);
         response.status(200);
-        response.header("Content-Length", xmlResponse.getBytes().length);
         response.header("Content-Type", "text/xml");
-        LOG.info(xmlResponse);
         return xmlResponse;
 
-      } catch (SAXException e) {
+      } catch (NumberFormatException | SAXException e) {
         String xmlResponse = buildXMLFault(3, "Illegal Argument Type");
         response.status(200);
-        response.header("Content-Length", xmlResponse.getBytes().length);
         response.header("Content-Type", "text/xml");
         return xmlResponse;
 
       } catch (ArithmeticException e) {
         String xmlResponse = buildXMLFault(1, "Divide by Zero");
         response.status(200);
-        response.header("Content-Length", xmlResponse.getBytes().length);
         response.header("Content-Type", "text/xml");
         return xmlResponse;
-      }
 
+      } catch (RuntimeException e) {
+        String xmlResponse = buildXMLFault(2, "Overflow");
+        response.status(200);
+        response.header("Content-Type", "text/xml");
+        return xmlResponse;
+
+      } catch (Exception e) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        String sStackTrace = sw.toString(); // stack trace as a string
+        return sStackTrace;
+      }
     });
 
     get("/*", (request, response) -> {
@@ -97,34 +107,31 @@ public class App {
       response.status(405);
       return "Method Not Supported";
     });
-
-    // Each of the verbs has a similar format: get() for GET,
-    // put() for PUT, delete() for DELETE. There's also an exception()
-    // for dealing with exceptions thrown from handlers.
-    // All of this is documented on the SparkJava website (https://sparkjava.com/).
-
   }
 
-  public static Call extractXMLRPCCall(String xmlBody) throws Exception {
+
+  public static Call extractXMLRPCCall(String xmlBody) throws Exception, NumberFormatException {
     DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
     Document doc = builder.parse(new ByteArrayInputStream(xmlBody.getBytes()));
+    XPath xPath = XPathFactory.newInstance().newXPath();
 
-    // Element methodCall = (Element) doc.getElementsByTagName("methodCall").item(0);
+    Node nameElement = (Node) xPath.compile("/methodCall/methodName").evaluate(
+      doc, XPathConstants.NODE);
+    String name = nameElement.getTextContent();
 
     // Get the list of parameters
-    String name = doc.getElementsByTagName("methodName").item(0).getTextContent();
-    NodeList paramElements = doc.getElementsByTagName("params");
+    NodeList paramElements = (NodeList) xPath.compile("/methodCall/params/param/value").evaluate(
+      doc, XPathConstants.NODESET);
 
-    List<Object> params = new ArrayList<Object>();
+    List<Integer> params = new ArrayList<Integer>();
     for (int i = 0; i < paramElements.getLength(); i++) {
-      Object param = Integer.parseInt(paramElements.item(i).getTextContent());
+      int param = Integer.parseInt(paramElements.item(i).getTextContent());
       params.add(param);
     }
-
     Call call = new Call();
     call.name = name;
     call.args = params;
-
+  
     return call;
   }
 
@@ -159,7 +166,7 @@ public class App {
 
     sb.append("<member>\n");
     sb.append("<name>faultString</name>");
-    sb.append("<value><String>").append(faultString).append("</String></value>\n");
+    sb.append("<value><string>").append(faultString).append("</string></value>\n");
     sb.append("</member>\n");
 
     sb.append("</struct>\n");
@@ -170,22 +177,30 @@ public class App {
     return sb.toString();
   }
 
-  private static int handleAdd(List<Object> params) throws SAXException {
-    Calc calc = new Calc();
-
-    int[] paramArr = new int[params.size()];
+  private static int handleAdd(List<Integer> params) throws SAXException, RuntimeException {
+    long[] paramArr = new long[params.size()];
     for (int i = 0; i < params.size(); i++) {
       // Exception: input from xml is not of type interger (i4)
       if (!(params.get(i) instanceof Integer)) {
         throw new SAXException();
       }
-      paramArr[i] = Integer.parseInt(params.get(i).toString());
+      paramArr[i] = Long.parseLong(params.get(i).toString());
     }
 
-    return calc.add(paramArr);
+    // Manually perform the add
+    // Need to check for overflow
+    long result = 0;
+    for (long arg : paramArr) { result += arg; }
+
+    // Exception: result integer is above max_value
+    if (result > Integer.MAX_VALUE) {
+      throw new RuntimeException();
+    }
+
+    return (int) result;
   }
 
-  private static int handleSubtract(List<Object> params) throws SAXException {
+  private static int handleSubtract(List<Integer> params) throws SAXException {
     // Exception: input from xml is not of type interger (i4)
     if (params.size() != 2 || !(params.get(0) instanceof Integer) || !(params.get(1) instanceof Integer)) {
       throw new SAXException();
@@ -198,28 +213,36 @@ public class App {
     return calc.subtract(lhs, rhs);
   }
 
-  private static int handleMultiply(List<Object> params) throws SAXException {
-    Calc calc = new Calc();
-
-    int[] paramArr = new int[params.size()];
+  private static int handleMultiply(List<Integer> params) throws SAXException, RuntimeException {
+    long[] paramArr = new long[params.size()];
     for (int i = 0; i < params.size(); i++) {
       // Exception: input from xml is not of type interger (i4)
       if (!(params.get(i) instanceof Integer)) {
         throw new SAXException();
       }
-      paramArr[i] = Integer.parseInt(params.get(i).toString());
+      paramArr[i] = Long.parseLong(params.get(i).toString());
     }
 
-    return calc.multiply(paramArr);
+    // Manually perform the multiply
+    // Calc.java starts the result = 0. Anything times 0 equals 0
+    // Need to check for overflow
+    long result = 1;
+    for (long arg : paramArr) { result *= arg; }
+
+    // Exception: result integer above max_value
+    if (result > Integer.MAX_VALUE) {
+      throw new RuntimeException();
+    }
+
+    return (int) result;
   }
 
-  private static int handleDivide(List<Object> params) throws SAXException, ArithmeticException {
+  private static int handleDivide(List<Integer> params) throws SAXException, ArithmeticException {
     // Exception: input from xml is not of type interger (i4)
     if (params.size() != 2 || !(params.get(0) instanceof Integer) || !(params.get(1) instanceof Integer)) {
       throw new SAXException();
     }
 
-    Calc calc = new Calc();
     int lhs = Integer.parseInt(params.get(0).toString());
     int rhs = Integer.parseInt(params.get(1).toString());
 
@@ -228,16 +251,16 @@ public class App {
       throw new ArithmeticException();
     }
 
+    Calc calc = new Calc();
     return calc.divide(lhs, rhs);
   }
 
-  private static int handleModulo(List<Object> params) throws SAXException, ArithmeticException {
+  private static int handleModulo(List<Integer> params) throws SAXException, ArithmeticException {
     // Exception: input from xml is not of type interger (i4)
     if (params.size() != 2 || !(params.get(0) instanceof Integer) || !(params.get(1) instanceof Integer)) {
       throw new SAXException();
     }
 
-    Calc calc = new Calc();
     int lhs = Integer.parseInt(params.get(0).toString());
     int rhs = Integer.parseInt(params.get(1).toString());
 
@@ -246,6 +269,7 @@ public class App {
       throw new ArithmeticException();
     }
 
+    Calc calc = new Calc();
     return calc.modulo(lhs, rhs);
   }
 }

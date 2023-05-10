@@ -35,27 +35,31 @@ public class Client {
     System.out.println(modulo(10, 5) == 0);
 
     try {
-      add(84673582, 90109893);
+      System.out.print("Overflowing add: ");
+      add(1274673582, 1980109893);
     } catch (Exception e) {
-      System.out.println("Received error on overflowing add: " + e.toString());
+      System.out.println(e.toString());
     }
 
     try {
-      multiply(29165, 16582);
+      System.out.print("Overflowing multiply: ");
+      multiply(39165, 136582);
     } catch (Exception e) {
-      System.out.println("Received error on overflowing multiply: " + e.toString());
+      System.out.println(e.toString());
     }
 
     try {
+      System.out.print("Subtracting strings: ");
       subtract("hi", "bye");
     } catch (Exception e) {
-      System.out.println("Received error on subtracting strings: " + e.toString());
+      System.out.println(e.toString());
     }
 
     try {
+      System.out.print("Dividing by 0: ");
       divide(5, 0);
     } catch (Exception e) {
-      System.out.println("Received error on dividing by 0: " + e.toString());
+      System.out.println(e.toString());
     }
   }
 
@@ -116,22 +120,26 @@ public class Client {
   private static String sendRequest(String methodName, Object[] params) throws Exception {
     // Create the xml formatted body
     String xmlRequest = buildXML(methodName, params);
-    String length = Integer.toString(xmlRequest.getBytes().length);
 
     // build and send the rpc request
     HttpClient client = HttpClient.newHttpClient();
     HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://" + host + ":" + port + "/RPC"))
             .header("User-Agent", "TedsTerrifyingThinkers")
-            // .header("Host", "localhost")
             .header("Content-Type", "text/xml")
-            // .header("Content-Length", length)
             .POST(BodyPublishers.ofString(xmlRequest))
             .build();
 
     // Receive the response
     HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
     String xmlResponse = response.body();
+
+    // Check to see the type of response
+    String responseType = response.headers().allValues("content-type").get(0);
+    if (responseType.contains("text/html")) {
+      int statusCode = response.statusCode();
+      throw new Exception(statusCode + " " + xmlResponse);
+    }
 
     return xmlResponse;
   }
@@ -142,19 +150,25 @@ public class Client {
     DocumentBuilder db = dbf.newDocumentBuilder();
     InputStream input = new ByteArrayInputStream(response.getBytes(StandardCharsets.UTF_8));
     Document doc = db.parse(input);
-    XPath xpath = XPathFactory.newInstance().newXPath();
+    XPath xPath = XPathFactory.newInstance().newXPath();
 
-    if (doc.getElementsByTagName("fault").getLength() > 0) {
-      String faultString = doc.getElementsByTagName("string").item(0).getTextContent();
-      throw new Exception("Server threw an exception: " + faultString);
+    // Check if there was a fault returned
+    Node faultExists = (Node) xPath.compile("/methodResponse/fault").evaluate(
+      doc, XPathConstants.NODE);
+
+    if (faultExists != null) {
+      Node faultElement = (Node) xPath.compile("/methodResponse/fault/value/struct/member/value/string").evaluate(
+      doc, XPathConstants.NODE);
+      String fault = faultElement.getTextContent();
+
+      throw new Exception("Server threw an exception: " + fault);
 
     } else {
-      NodeList nodeList = doc.getElementsByTagName("methodResponse");
-      // NodeList nodeList = (NodeList) xPath.compile("")
-      Node resultNode = nodeList.item(0);
-      System.out.println(doc);
+      Node resultElement = (Node) xPath.compile("/methodResponse/params/param/value").evaluate(
+      doc, XPathConstants.NODE);
+      String result = resultElement.getTextContent();
 
-      return Integer.parseInt(resultNode.getTextContent());
+      return Integer.parseInt(result);
     }
   }
 
