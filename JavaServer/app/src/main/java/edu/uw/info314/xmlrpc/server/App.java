@@ -33,79 +33,92 @@ public class App {
     LOG.info("Starting up on port 8080");
     port(8080);
 
-    Filter checkPath = (request, response) -> {
+    // Filter checkPath = (request, response) -> {
+    //   if (!request.pathInfo().equals("/RPC")) {
+    //     halt(404, "Not Found");
+    //   }
+    // };
+
+    // before(checkPath);
+
+    post("/*", (request, response) -> {
       if (!request.pathInfo().equals("/RPC")) {
-        halt(404, "Not Found");
-      }
-    };
+        String xmlResponse = buildXMLFault(404, "404: Not Found");
+        response.status(404);
+        response.header("Content-Type", "text/xml");
+        return xmlResponse;
+      } else {
+        try {
+          Call call = extractXMLRPCCall(request.body());
+          int result = 0;
+          if (call.name.equals("add")) {
+            result = handleAdd(call.args);
 
-    before(checkPath);
+          } else if (call.name.equals("subtract")) {
+            result = handleSubtract(call.args);
 
-    post("/RPC", (request, response) -> {
-      try {
-        Call call = extractXMLRPCCall(request.body());
-        int result = 0;
-        if (call.name.equals("add")) {
-          result = handleAdd(call.args);
+          } else if (call.name.equals("multiply")) {
+            result = handleMultiply(call.args);
 
-        } else if (call.name.equals("subtract")) {
-          result = handleSubtract(call.args);
+          } else if (call.name.equals("divide")) {
+            result = handleDivide(call.args);
 
-        } else if (call.name.equals("multiply")) {
-          result = handleMultiply(call.args);
+          } else if (call.name.equals("modulo")) {
+            result = handleModulo(call.args);
+          }
 
-        } else if (call.name.equals("divide")) {
-          result = handleDivide(call.args);
+          String xmlResponse = buildXML(result);
+          response.status(200);
+          response.header("Content-Type", "text/xml");
+          return xmlResponse;
 
-        } else if (call.name.equals("modulo")) {
-          result = handleModulo(call.args);
+        } catch (NumberFormatException | SAXException e) {
+          String xmlResponse = buildXMLFault(3, "Illegal Argument Type");
+          response.status(200);
+          response.header("Content-Type", "text/xml");
+          return xmlResponse;
+
+        } catch (ArithmeticException e) {
+          String xmlResponse = buildXMLFault(1, "Divide by Zero");
+          response.status(200);
+          response.header("Content-Type", "text/xml");
+          return xmlResponse;
+
+        } catch (RuntimeException e) {
+          String xmlResponse = buildXMLFault(2, "Overflow");
+          response.status(200);
+          response.header("Content-Type", "text/xml");
+          return xmlResponse;
+
+        } catch (Exception e) {
+          StringWriter sw = new StringWriter();
+          PrintWriter pw = new PrintWriter(sw);
+          e.printStackTrace(pw);
+          String sStackTrace = sw.toString(); // stack trace as a string
+          return sStackTrace;
         }
-
-        String xmlResponse = buildXML(result);
-        response.status(200);
-        response.header("Content-Type", "text/xml");
-        return xmlResponse;
-
-      } catch (NumberFormatException | SAXException e) {
-        String xmlResponse = buildXMLFault(3, "Illegal Argument Type");
-        response.status(200);
-        response.header("Content-Type", "text/xml");
-        return xmlResponse;
-
-      } catch (ArithmeticException e) {
-        String xmlResponse = buildXMLFault(1, "Divide by Zero");
-        response.status(200);
-        response.header("Content-Type", "text/xml");
-        return xmlResponse;
-
-      } catch (RuntimeException e) {
-        String xmlResponse = buildXMLFault(2, "Overflow");
-        response.status(200);
-        response.header("Content-Type", "text/xml");
-        return xmlResponse;
-
-      } catch (Exception e) {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        e.printStackTrace(pw);
-        String sStackTrace = sw.toString(); // stack trace as a string
-        return sStackTrace;
       }
     });
 
     get("/*", (request, response) -> {
+      String xmlResponse = buildXMLFault(405, "405: Method Not Supported");
       response.status(405);
-      return "Method Not Supported";
+      response.header("Content-Type", "text/xml");
+      return xmlResponse;
     });
 
     put("/*", (request, response) -> {
+      String xmlResponse = buildXMLFault(405, "405: Method Not Supported");
       response.status(405);
-      return "Method Not Supported";
+      response.header("Content-Type", "text/xml");
+      return xmlResponse;
     });
 
     delete("/*", (request, response) -> {
+      String xmlResponse = buildXMLFault(405, "405: Method Not Supported");
       response.status(405);
-      return "Method Not Supported";
+      response.header("Content-Type", "text/xml");
+      return xmlResponse;
     });
   }
 
@@ -161,7 +174,7 @@ public class App {
 
     sb.append("<member>\n");
     sb.append("<name>faultCode</name>");
-    sb.append("<value><int>").append(faultCode).append("</int></value>\n");
+    sb.append("<value><i4>").append(faultCode).append("</i4></value>\n");
     sb.append("</member>\n");
 
     sb.append("<member>\n");

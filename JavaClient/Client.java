@@ -134,13 +134,6 @@ public class Client {
     HttpResponse<String> response = client.send(request, BodyHandlers.ofString());
     String xmlResponse = response.body();
 
-    // Check to see the type of response
-    String responseType = response.headers().allValues("content-type").get(0);
-    if (responseType.contains("text/html")) {
-      int statusCode = response.statusCode();
-      throw new Exception(statusCode + " " + xmlResponse);
-    }
-
     return xmlResponse;
   }
 
