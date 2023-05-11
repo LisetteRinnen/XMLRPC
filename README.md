@@ -78,6 +78,7 @@ In order to ensure that your use of XML-RPC is correct, you must demonstrate tha
 *Client calling another server, 1 pt. Server called by another client, 1 pt.*
 
 *My client using **Frederick Chan's** server*
+
 *My server using **Sean Sexton's** client*
 
 ## A note about Gradle

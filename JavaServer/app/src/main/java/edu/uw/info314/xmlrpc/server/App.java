@@ -33,14 +33,6 @@ public class App {
     LOG.info("Starting up on port 8080");
     port(8080);
 
-    // Filter checkPath = (request, response) -> {
-    //   if (!request.pathInfo().equals("/RPC")) {
-    //     halt(404, "Not Found");
-    //   }
-    // };
-
-    // before(checkPath);
-
     post("/*", (request, response) -> {
       if (!request.pathInfo().equals("/RPC")) {
         String xmlResponse = buildXMLFault(404, "404: Not Found");
@@ -144,9 +136,10 @@ public class App {
     Call call = new Call();
     call.name = name;
     call.args = params;
-  
+
     return call;
   }
+
 
   private static String buildXML(int value) {
     StringBuilder sb = new StringBuilder();
@@ -162,6 +155,7 @@ public class App {
 
     return sb.toString();
   }
+
 
   private static String buildXMLFault(int faultCode, String faultString) {
     StringBuilder sb = new StringBuilder();
@@ -190,6 +184,7 @@ public class App {
     return sb.toString();
   }
 
+
   private static int handleAdd(List<Integer> params) throws SAXException, RuntimeException {
     long[] paramArr = new long[params.size()];
     for (int i = 0; i < params.size(); i++) {
@@ -213,6 +208,7 @@ public class App {
     return (int) result;
   }
 
+
   private static int handleSubtract(List<Integer> params) throws SAXException {
     // Exception: input from xml is not of type interger (i4)
     if (params.size() != 2 || !(params.get(0) instanceof Integer) || !(params.get(1) instanceof Integer)) {
@@ -225,6 +221,7 @@ public class App {
 
     return calc.subtract(lhs, rhs);
   }
+
 
   private static int handleMultiply(List<Integer> params) throws SAXException, RuntimeException {
     long[] paramArr = new long[params.size()];
@@ -250,6 +247,7 @@ public class App {
     return (int) result;
   }
 
+
   private static int handleDivide(List<Integer> params) throws SAXException, ArithmeticException {
     // Exception: input from xml is not of type interger (i4)
     if (params.size() != 2 || !(params.get(0) instanceof Integer) || !(params.get(1) instanceof Integer)) {
@@ -267,6 +265,7 @@ public class App {
     Calc calc = new Calc();
     return calc.divide(lhs, rhs);
   }
+
 
   private static int handleModulo(List<Integer> params) throws SAXException, ArithmeticException {
     // Exception: input from xml is not of type interger (i4)
